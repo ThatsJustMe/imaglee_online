@@ -1,0 +1,64 @@
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.env
+*.venv
+
+# Django
+*.log
+db.sqlite3
+
+# Node.js
+node_modules/
+
+# Docker
+*.log
+*.pid
+*.seed
+*.pid.lock
+.env
+docker-compose.override.yml
+docker-compose.*.yml
+
+# PostgreSQL
+*.sql
+*.dump
+
+# GraphQL
+*.graphql
+
+# Saleor
+backend/saleor/static/
+backend/saleor/media/
+
+# Wagtail
+backend/wagtail/static/
+backend/wagtail/media/
+# Keep certain files in static and media directories
+# !backend/wagtail/static/important-files/
+# !backend/wagtail/media/uploads/
+
+# Nginx
+nginx/*.conf
+nginx/logs/
+
+# VueJS
+dist/
+!.env.local
+!.env.*.local
+
+# Mac OS
+.DS_Store
+
+# Secret files for Docker
+docker-compose.secrets.yml
+*.key
+*.crt
+
+# Editor specific files
+.vscode/
+.idea/
+.nova/
+*.sublime-project
+*.sublime-workspace

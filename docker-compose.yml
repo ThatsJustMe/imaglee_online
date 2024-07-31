@@ -1,0 +1,195 @@
+version: '3.8'
+
+
+secrets:
+  django_secret_key:
+    external: true
+  project_admin_username:
+    external: true
+  project_admin_password:
+    external: true
+  graphql_query_username:
+    external: true
+  graphql_query_password:
+    external: true
+  db_root_username:
+    external: true
+  db_root_password:
+    external: true
+  db_django_username:
+    external: true
+  db_django_password:
+    external: true
+  db_eshop_username:
+    external: true
+  db_eshop_password:
+    external: true
+  db_wagtail_username:
+    external: true
+  db_wagtail_password:
+    external: true
+  db_apps_username:
+    external: true
+  db_apps_password:
+    external: true
+  db_sslrootcert:
+    external: true
+  db_sslcert:
+    external: true
+  db_sslkey:
+    external: true
+  nginx_htpasswd:
+    external: true
+  apollo_api_key:
+    external: true
+  redis_password:
+    external: true
+  graphql_token:
+    external: true
+  jwt_secret:
+    external: true
+  cookie_secret:
+    external: true
+
+
+services:
+  django:
+    build: ./backend/imaglee
+    container_name: django
+    volumes:
+      - ./backend/imaglee:/app
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    secrets:
+      - django_secret_key
+      - db_django_username
+      - db_django_password
+      - db_wagtail_username
+      - db_wagtail_password
+      - db_apps_username
+      - db_apps_password
+      - db_sslrootcert
+      - db_sslcert
+      - db_sslkey
+      - redis_password
+    environment:
+      DATABASE_URL_DJANGO: "postgres://$(cat /run/secrets/db_django_username):$(cat /run/secrets/db_django_password)@db:5432/db_django?sslmode=verify-full&sslrootcert=/run/secrets/db_sslrootcert"
+      DATABASE_URL_WAGTAIL: "postgres://$(cat /run/secrets/db_wagtail_username):$(cat /run/secrets/db_wagtail_password)@db:5432/db_wagtail?sslmode=verify-full&sslrootcert=/run/secrets/db_sslrootcert"
+      DATABASE_URL_APPS: "postgres://$(cat /run/secrets/db_apps_username):$(cat /run/secrets/db_apps_password)@db:5432/db_apps?sslmode=verify-full&sslrootcert=/run/secrets/db_sslrootcert"
+      DB_SSLROOTCERT: /run/secrets/db_sslrootcert
+      DB_SSLCERT: /run/secrets/db_sslcert
+      DB_SSLKEY: /run/secrets/db_sslkey
+      REDIS_URL: redis://:$(cat /run/secrets/redis_password)@redis:6379/1
+    depends_on:
+      - db
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+  medusa:
+    build: ./backend/eshop
+    container_name: medusa
+    volumes:
+      - ./backend/eshop:/app
+    expose:
+      - "9000"
+    env_file:
+      - .env
+    secrets:
+      - db_eshop_username
+      - db_eshop_password
+      - db_sslrootcert
+      - db_sslcert
+      - db_sslkey
+      - jwt_secret
+      - cookie_secret
+    environment:
+      DATABASE_URL_MEDUSA: "postgres://$(cat /run/secrets/db_eshop_username):$(cat /run/secrets/db_eshop_password)@db:5432/db_eshop?sslmode=verify-full&sslrootcert=/run/secrets/db_sslrootcert"
+      DB_SSLROOTCERT: /run/secrets/db_sslrootcert
+      DB_SSLCERT: /run/secrets/db_sslcert
+      DB_SSLKEY: /run/secrets/db_sslkey
+      JWT_SECRET: /run/secrets/jwt_secret
+      COOKIE_SECRET: /run/secrets/cookie_secret
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+  vue:
+    build: ./frontend/imaglee-app
+    container_name: vue
+    volumes:
+      - ./frontend/imaglee-app:/app
+    expose:
+      - "80"
+    command: npm run build
+    depends_on:
+      - django
+
+
+  db:
+    image: postgres:13
+    container_name: db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./postgresql/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+      - ./postgresql/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf:ro
+      - ./postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
+    secrets:
+      - db_sslrootcert
+      - db_sslcert
+      - db_sslkey
+      - db_root_username
+      - db_root_password
+    environment:
+      POSTGRES_INITDB_ARGS: "-A md5"
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+      POSTGRES_USER_FILE: /run/secrets/db_root_username
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_root_password
+    entrypoint: ["/bin/sh", "-c", "ln -s /run/secrets/db_sslrootcert /etc/ssl/certs/server.crt && ln -s /run/secrets/db_sslcert /etc/ssl/private/server.key && ln -s /run/secrets/db_sslkey /etc/ssl/certs/rootCA.crt && exec postgres -c 'config_file=/etc/postgresql/postgresql.conf'"]
+
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+    secrets:
+      - redis_password
+
+
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    volumes:
+      - static_volume:/usr/share/nginx/html/static
+      - media_volume:/usr/share/nginx/html/media
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - django
+      - vue
+      - medusa
+    secrets:
+      - db_sslcert
+      - db_sslkey
+      - nginx_htpasswd
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
